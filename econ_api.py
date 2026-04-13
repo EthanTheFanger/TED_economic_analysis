@@ -4,7 +4,11 @@ from pymongo import MongoClient
 
 client = MongoClient('mongodb://localhost:27017/')
 db = client['ted_global']
+
+# trends, regions, countries
 yearly_trends = db.yearly_trends
+regions = db.regions
+countries = db.countries
 
 #initialize csv data into database
 def import_csv(csv):
@@ -118,3 +122,42 @@ def aggregate_songs(matches=None, group_by=None, metrics=None, sort=None, fields
     songs = db.songs.aggregate(agg)
     for s in songs:
         print(s)
+
+def add_region(region_id, name, country_list):
+    """
+    Add a new region to the regions collection.
+
+    Example:
+        add_region("OCEANIA", "Oceania", ["AUS", "NZL"])
+    """
+    regions.insert_one({
+    "_id": region_id,
+    "name": name,
+    "countries": country_list
+})
+
+def add_country(country_id, name, region):
+    """
+    Add a new country to the countries collection.
+
+    Example:
+        add_country("AUS", "Australia", "OCEANIA")
+    """
+    countries.insert_one({
+        "_id": country_id,
+        "name": name,
+        "region": region
+    })
+
+    
+def add_characterisitcs(filter_field, filter_val, new_field, char_value):
+    """
+    Add or update a field on all documents matching a condition.
+
+    Example:
+        add_characteristic('country', 'Japan', 'high_tech_economy', True)
+    """
+    yearly_trends.update_many(
+        {filter_field: filter_val},
+        {'$set': {new_field: char_value}}
+    )

@@ -12,15 +12,57 @@ db = client[os.getenv('DB_NAME')]
 yearly_trends = db[os.getenv('COLLECTION1')]
 countries = db.countries
 
+country_id_map = {'Japan': 'JPN', 'Taiwan': 'TWN', 'China': 'CHN',
+                  'Germany': 'DEU', 'Sweden': 'SWE', 'Italy': 'ITA',
+                  'United States': 'USA', 'Canada': 'CAN', 'Mexico': 'MEX'}
+
+country_region_map = {
+    'Japan':         'Asia',
+    'Taiwan':        'Asia',
+    'China':         'Asia',
+    'Germany':       'Europe',
+    'Sweden':        'Europe',
+    'Italy':         'Europe',
+    'United States': 'Americas',
+    'Canada':        'Americas',
+    'Mexico':        'Americas'
+}
+
 #initialize csv data into database
 def import_csv(csv):
     yearly_trends.drop()
+    countries.drop()
+    df = pd.read_csv(csv)
     df = pd.read_csv(csv)
     print(df.columns.tolist())
     df.columns = df.columns.str.strip()
     df['country'] = df['country'].str.strip()
     df['region'] = df['region'].str.strip()
     yearly_trends.insert_many(df.to_dict(orient='records'))
+
+    yearly_trends.update_many({},[
+        {'$set': {
+            "labor_contributions": {
+                "quantity": "$labor_quantity_contribution",
+                "quality": "$labor_quality_contribution"
+            },
+            "capital_contributions": {
+                "ict": "$ict_capital_contribution",
+                "non_ict": "$non_ict_capital_contribution",
+                "total": "$total_capital_contribution"}}
+    },
+        {'$unset': ["labor_quantity_contribution",
+                       "labor_quality_contribution",
+                        "ict_capital_contribution",
+                       "non_ict_capital_contribution",
+                       "total_capital_contribution"]}])
+
+    for country in df['country'].unique():
+        countries.insert_one({
+            '_id': country_id_map[country],
+            'name': country,
+            'region': country_region_map[country]
+        })
 
 def define_outputs(fields):
     return {field: 1 for field in fields} | {'_id': 0}
@@ -160,4 +202,3 @@ def add_characteristic(filter_field, filter_val, new_field, char_value):
         {filter_field: filter_val},
         {'$set': {new_field: char_value}}
     )
-

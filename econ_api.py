@@ -12,14 +12,52 @@ db = client[os.getenv('DB_NAME')]
 yearly_trends = db[os.getenv('COLLECTION1')]
 countries = db.countries
 
+country_id_map = {'Japan': 'JPN', 'Taiwan': 'TWN', 'China': 'CHN',
+                  'Germany': 'DEU', 'Sweden': 'SWE', 'Italy': 'ITA',
+                  'United States': 'USA', 'Canada': 'CAN', 'Mexico': 'MEX'}
+
+country_region_map = {
+    'Japan':         'Asia',
+    'Taiwan':        'Asia',
+    'China':         'Asia',
+    'Germany':       'Europe',
+    'Sweden':        'Europe',
+    'Italy':         'Europe',
+    'United States': 'Americas',
+    'Canada':        'Americas',
+    'Mexico':        'Americas'
+}
+
 #initialize csv data into database
 def import_csv(csv):
     yearly_trends.drop()
-    df = pd.read_csv(csv, sep='\t')
-    df.columns = df.columns.str.strip()
-    df['country'] = df['country'].str.strip()
-    df['region'] = df['region'].str.strip()
+    countries.drop()
+    df = pd.read_csv(csv)
     yearly_trends.insert_many(df.to_dict(orient='records'))
+
+    yearly_trends.update_many({},[
+        {'$set': {
+            "labor_contributions": {
+                "quantity": "$labor_quantity_contribution",
+                "quality": "$labor_quality_contribution"
+            },
+            "capital_contributions": {
+                "ict": "$ict_capital_contribution",
+                "non_ict": "$non_ict_capital_contribution",
+                "total": "$total_capital_contribution"}}
+    },
+        {'$unset': ["labor_quantity_contribution",
+                       "labor_quality_contribution",
+                        "ict_capital_contribution",
+                       "non_ict_capital_contribution",
+                       "total_capital_contribution"]}])
+
+    for country in df['country'].unique():
+        countries.insert_one({
+            '_id': country_id_map[country],
+            'name': country,
+            'region': country_region_map[country]
+        })
 
 def define_outputs(fields):
     return {field: 1 for field in fields} | {'_id': 0}
@@ -159,3 +197,44 @@ def add_characteristic(filter_field, filter_val, new_field, char_value):
         {filter_field: filter_val},
         {'$set': {new_field: char_value}}
     )
+
+
+#import_csv('ted_data.csv')
+#create_nested_fields
+
+metrics = ['real_gdp', 'gdp_growth', 'labor_productivity', 'labor_contributions.quantity',
+           'labor_contributions.quality', 'capital_contributions.ict', 'capital_contributions.non_ict',
+           'capital_contributions.total','tfp_growth']
+
+def update_country_profile():
+    results = {}
+
+    for metric in metrics:
+        name = f"avg_{metric.replace('.', '_')}"
+        pipeline = [
+            { "$group": {
+                "_id": "$country",
+                name: { "$avg": f"${metric}" }
+            }},
+            { "$project": {
+                "_id": 1,
+                name: { "$round": [f"${name}", 2] }
+            }}
+        ]
+        for doc in db.yearly_trends.aggregate(pipeline):
+            country = doc["_id"]
+            if country not in results:
+                results[country] = {}
+            results[country][name] = doc[name]
+
+    # Update each country document with its data_profile
+    for country_name, profile in results.items():
+        country_id = country_id_map[country_name]
+        db.countries.update_one(
+            { "_id": country_id },
+            { "$set": { "data_profile": profile } }
+        )
+
+import_csv('ted_data.csv')
+update_country_profile()
+print(db.countries.find_one({'_id': 'TWN'}))

@@ -287,7 +287,8 @@ def plot_metrics(countries, metrics, start_year, end_year):
                 values = [r.get(metric, 0) for r in records]
                 country_data[country] = (years, values)
                 all_values.extend(values)
-
+        
+        # normalize
         min_val = min(all_values)
         max_val = max(all_values)
 
@@ -297,14 +298,12 @@ def plot_metrics(countries, metrics, start_year, end_year):
                 normalized = [(v - min_val) / (max_val - min_val) for v in values]
             else:
                 normalized = [0.5] * len(values)
-            ax.plot(years, normalized, marker='o', label=f'{country} - {metric}')
+            ax.plot(years, normalized, label=f'{country} - {metric}')
 
     ax.set_title(f'Normalized Metrics ({start_year}–{end_year})')
     ax.set_xlabel('Year')
     ax.set_ylabel('Normalized Value (0-1)')
     ax.legend()
-    ax.grid(True)
-
     plt.tight_layout()
     plt.show()
 
@@ -325,8 +324,8 @@ def plot_metrics(countries, metrics, start_year, end_year):
 # print()
 
 plot_metrics(
-    countries=['United States'],
-    metrics=['real_gdp', 'tfp_growth', 'labor_productivity'],
-    start_year=2019,
-    end_year=2021
+    countries=['United States','China','Italy'],
+    metrics=['tfp_growth'],
+    start_year=1990,
+    end_year=2025
 )

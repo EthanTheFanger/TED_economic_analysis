@@ -16,17 +16,9 @@ country_id_map = {'Japan': 'JPN', 'Taiwan': 'TWN', 'China': 'CHN',
                   'Germany': 'DEU', 'Sweden': 'SWE', 'Italy': 'ITA',
                   'United States': 'USA', 'Canada': 'CAN', 'Mexico': 'MEX'}
 
-country_region_map = {
-    'Japan':         'Asia',
-    'Taiwan':        'Asia',
-    'China':         'Asia',
-    'Germany':       'Europe',
-    'Sweden':        'Europe',
-    'Italy':         'Europe',
-    'United States': 'Americas',
-    'Canada':        'Americas',
-    'Mexico':        'Americas'
-}
+country_region_map = {'Japan': 'Asia', 'Taiwan': 'Asia', 'China': 'Asia',
+                      'Germany': 'Europe', 'Sweden': 'Europe', 'Italy': 'Europe',
+                      'United States': 'Americas', 'Canada': 'Americas','Mexico': 'Americas'}
 
 #initialize csv data into database
 def import_csv(csv):
@@ -198,15 +190,10 @@ def add_characteristic(filter_field, filter_val, new_field, char_value):
         {'$set': {new_field: char_value}}
     )
 
-
-#import_csv('ted_data.csv')
-#create_nested_fields
-
-metrics = ['real_gdp', 'gdp_growth', 'labor_productivity', 'labor_contributions.quantity',
-           'labor_contributions.quality', 'capital_contributions.ict', 'capital_contributions.non_ict',
-           'capital_contributions.total','tfp_growth']
-
 def update_country_profile():
+    metrics = ['real_gdp', 'gdp_growth', 'labor_productivity', 'labor_contributions.quantity',
+               'labor_contributions.quality', 'capital_contributions.ict', 'capital_contributions.non_ict',
+               'capital_contributions.total', 'tfp_growth']
     results = {}
 
     for metric in metrics:
@@ -235,6 +222,49 @@ def update_country_profile():
             { "$set": { "data_profile": profile } }
         )
 
+def update_metric_strengths():
+    metrics = ['real_gdp', 'gdp_growth', 'labor_productivity', 'labor_contributions.quantity',
+               'labor_contributions.quality', 'capital_contributions.ict', 'capital_contributions.non_ict',
+               'capital_contributions.total', 'tfp_growth']
+    strengths = {}
+
+    for metric in metrics:
+        name = f"avg_{metric.replace('.', '_')}"
+        pipeline = [
+            {"$group": {
+                "_id": "$country",
+                name: {"$avg": f"${metric}"}
+            }},
+            {"$sort": { name: -1 }},
+            {"$limit": 1}
+        ]
+
+        # update each country document with its strengths list
+        for doc in db.yearly_trends.aggregate(pipeline):
+            country = doc["_id"]
+            if country not in strengths:
+                strengths[country] = []
+            strengths[country].append(metric)
+
+    # Update each country document with its data_profile
+    for country_name, strength_list in strengths.items():
+        country_id = country_id_map[country_name]
+        db.countries.update_one(
+            {"_id": country_id},
+            {"$push": {"strengths": {"$each": strength_list}}}
+        )
+
 import_csv('ted_data.csv')
+print('Profile for China:')
+print(db.countries.find_one({'_id': 'CHN'}))
+print()
+
 update_country_profile()
-print(db.countries.find_one({'_id': 'TWN'}))
+print('Updated Profile for China with Data:')
+print(db.countries.find_one({'_id': 'CHN'}))
+print()
+
+update_metric_strengths()
+print('Updated Profile for China with Strengths:')
+print(db.countries.find_one({'_id': 'CHN'}))
+print()
